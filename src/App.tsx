@@ -8,6 +8,7 @@ import { Login } from './pages/Login';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { Dashboard } from './pages/Dashboard';
 import { Goals } from './pages/Goals';
+import { Companies } from './pages/Companies';
 import { setupAdminUser } from './lib/firebase';
 import { differenceInDays, parseISO } from 'date-fns';
 
@@ -65,6 +66,14 @@ function App() {
             element={
               <PrivateRoute>
                 <Goals />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/companies"
+            element={
+              <PrivateRoute>
+                <Companies />
               </PrivateRoute>
             }
           />

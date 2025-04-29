@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { getAllUsers, approveUser, disapproveUser, updateUserAccess } from '../contexts/AuthContext';
-import { CheckCircle, XCircle, UserCheck, UserX, Search, LogOut, Users, Clock, Calendar } from 'lucide-react';
+import { CheckCircle, XCircle, UserCheck, UserX, Search, LogOut, Users, Clock, Calendar, AlertTriangle, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, parseISO, differenceInDays, addDays, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { doc, deleteDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface UserData {
   uid: string;
@@ -26,27 +28,95 @@ interface AccessModalProps {
   onSave: (userId: string, accessDuration: number, expirationDate: string) => Promise<void>;
 }
 
+interface DeleteUserModalProps {
+  user: UserData;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}
+
+const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ user, onClose, onConfirm }) => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleDelete = async () => {
+    try {
+      setIsLoading(true);
+      await onConfirm();
+      onClose();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+      <div className="bg-dark-secondary w-full max-w-md rounded-xl">
+        <div className="p-4 border-b border-dark-tertiary">
+          <h2 className="text-lg font-semibold text-red-400">Excluir Usuário</h2>
+          <p className="text-sm text-gray-400 mt-1">{user.username}</p>
+        </div>
+
+        <div className="p-6">
+          <div className="flex items-center justify-center mb-4">
+            <div className="w-12 h-12 rounded-full bg-red-400/10 flex items-center justify-center">
+              <AlertTriangle className="w-8 h-8 text-red-400" />
+            </div>
+          </div>
+
+          <div className="text-center mb-6">
+            <p className="text-gray-200 mb-4">
+              Você está prestes a excluir permanentemente este usuário e todos os seus dados.
+            </p>
+            <p className="text-sm text-red-400 font-medium">
+              Esta ação não pode ser desfeita!
+            </p>
+          </div>
+
+          <div className="flex gap-4">
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-3 text-gray-400 hover:text-gray-300 bg-dark-tertiary rounded-lg"
+              disabled={isLoading}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={isLoading}
+              className="flex-1 bg-red-500 text-white px-4 py-3 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+            >
+              {isLoading ? 'Excluindo...' : 'Excluir Usuário'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AccessModal: React.FC<AccessModalProps> = ({ user, onClose, onSave }) => {
   const [days, setDays] = useState('30');
   const [isLoading, setIsLoading] = useState(false);
-  const [customDate, setCustomDate] = useState(
-    format(addDays(new Date(), 30), 'yyyy-MM-dd')
-  );
-  const [useCustomDate, setUseCustomDate] = useState(false);
+  const [operation, setOperation] = useState<'add' | 'remove'>('add');
 
   const handleSave = async () => {
     try {
       setIsLoading(true);
-      const expirationDate = useCustomDate
-        ? new Date(customDate).toISOString()
-        : addDays(new Date(), parseInt(days)).toISOString();
+      const daysNumber = parseInt(days);
       
-      // Calculate duration in seconds
-      const durationInSeconds = useCustomDate
-        ? Math.floor((new Date(customDate).getTime() - new Date().getTime()) / 1000)
-        : parseInt(days) * 24 * 60 * 60;
+      // Calculate new duration based on operation
+      let newDuration = user.accessDuration || 0;
+      if (operation === 'add') {
+        newDuration += (daysNumber * 24 * 60 * 60); // Convert days to seconds
+      } else {
+        newDuration = Math.max(0, newDuration - (daysNumber * 24 * 60 * 60));
+      }
 
-      await onSave(user.uid, durationInSeconds, expirationDate);
+      // Calculate new expiration date
+      const expirationDate = addDays(new Date(), Math.floor(newDuration / (24 * 60 * 60))).toISOString();
+
+      await onSave(user.uid, newDuration, expirationDate);
       onClose();
     } catch (error) {
       console.error('Error updating access:', error);
@@ -55,12 +125,14 @@ const AccessModal: React.FC<AccessModalProps> = ({ user, onClose, onSave }) => {
     }
   };
 
+  const currentDays = user.accessDuration ? Math.floor(user.accessDuration / (24 * 60 * 60)) : 0;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-dark-secondary rounded-xl w-full max-w-md">
         <div className="p-4 border-b border-dark-tertiary">
           <h2 className="text-lg font-semibold text-gold-primary">
-            Definir Período de Acesso
+            Gerenciar Período de Acesso
           </h2>
           <p className="text-sm text-gray-400 mt-1">
             {user.username}
@@ -68,47 +140,61 @@ const AccessModal: React.FC<AccessModalProps> = ({ user, onClose, onSave }) => {
         </div>
 
         <div className="p-4 space-y-4">
-          <div className="flex items-center gap-2 mb-4">
-            <input
-              type="checkbox"
-              id="useCustomDate"
-              checked={useCustomDate}
-              onChange={(e) => setUseCustomDate(e.target.checked)}
-              className="rounded bg-dark-tertiary border-dark-tertiary text-gold-primary focus:ring-gold-primary"
-            />
-            <label htmlFor="useCustomDate" className="text-sm text-gray-300">
-              Definir data específica
-            </label>
+          <div className="bg-dark-tertiary rounded-lg p-4">
+            <p className="text-sm text-gray-400">Período atual</p>
+            <p className="text-lg font-medium text-gray-200 mt-1">
+              {currentDays} dias
+            </p>
           </div>
 
-          {useCustomDate ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Data de Expiração
-              </label>
-              <input
-                type="date"
-                value={customDate}
-                onChange={(e) => setCustomDate(e.target.value)}
-                min={format(new Date(), 'yyyy-MM-dd')}
-                className="w-full rounded-lg bg-dark-tertiary border-dark-tertiary text-gray-200 p-3 focus:ring-2 focus:ring-gold-primary focus:border-transparent"
-              />
-            </div>
-          ) : (
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Dias de Acesso
-              </label>
-              <input
-                type="number"
-                value={days}
-                onChange={(e) => setDays(e.target.value)}
-                min="1"
-                className="w-full rounded-lg bg-dark-tertiary border-dark-tertiary text-gray-200 p-3 focus:ring-2 focus:ring-gold-primary focus:border-transparent"
-                placeholder="Ex: 30"
-              />
-            </div>
-          )}
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <button
+              onClick={() => setOperation('add')}
+              className={`p-3 rounded-lg transition-colors ${
+                operation === 'add'
+                  ? 'bg-emerald-400/10 text-emerald-400 border-2 border-emerald-400'
+                  : 'bg-dark-tertiary text-gray-400 border-2 border-transparent'
+              }`}
+            >
+              Adicionar dias
+            </button>
+            <button
+              onClick={() => setOperation('remove')}
+              className={`p-3 rounded-lg transition-colors ${
+                operation === 'remove'
+                  ? 'bg-red-400/10 text-red-400 border-2 border-red-400'
+                  : 'bg-dark-tertiary text-gray-400 border-2 border-transparent'
+              }`}
+            >
+              Remover dias
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Quantidade de dias
+            </label>
+            <input
+              type="number"
+              value={days}
+              onChange={(e) => setDays(e.target.value)}
+              min="1"
+              className="w-full rounded-lg bg-dark-tertiary border-dark-tertiary text-gray-200 p-3 focus:ring-2 focus:ring-gold-primary focus:border-transparent"
+              placeholder="Ex: 30"
+            />
+          </div>
+
+          <div className="bg-dark-tertiary rounded-lg p-4 mt-4">
+            <p className="text-sm text-gray-400">Após a alteração</p>
+            <p className={`text-lg font-medium mt-1 ${
+              operation === 'add' ? 'text-emerald-400' : 'text-red-400'
+            }`}>
+              {operation === 'add' 
+                ? `${currentDays + parseInt(days || '0')} dias`
+                : `${Math.max(0, currentDays - parseInt(days || '0'))} dias`
+              }
+            </p>
+          </div>
 
           <div className="flex justify-end gap-3 mt-6">
             <button
@@ -119,10 +205,14 @@ const AccessModal: React.FC<AccessModalProps> = ({ user, onClose, onSave }) => {
             </button>
             <button
               onClick={handleSave}
-              disabled={isLoading || (!useCustomDate && !days) || (useCustomDate && !customDate)}
-              className="bg-gold-primary text-dark-primary px-4 py-2 rounded-lg hover:bg-gold-hover transition-colors disabled:opacity-50"
+              disabled={isLoading || !days || parseInt(days) <= 0}
+              className={`px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${
+                operation === 'add'
+                  ? 'bg-emerald-400 text-dark-primary hover:bg-emerald-500'
+                  : 'bg-red-400 text-dark-primary hover:bg-red-500'
+              }`}
             >
-              {isLoading ? 'Salvando...' : 'Salvar'}
+              {isLoading ? 'Salvando...' : operation === 'add' ? 'Adicionar' : 'Remover'}
             </button>
           </div>
         </div>
@@ -135,6 +225,7 @@ export const AdminDashboard: React.FC = () => {
   const [users, setUsers] = useState<UserData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserData | null>(null);
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -162,6 +253,21 @@ export const AdminDashboard: React.FC = () => {
     await updateUserAccess(userId, accessDuration, expirationDate);
     const updatedUsers = await getAllUsers();
     setUsers(updatedUsers as UserData[]);
+  };
+
+  const handleDeleteUser = async (user: UserData) => {
+    try {
+      // Delete user document
+      await deleteDoc(doc(db, 'users', user.uid));
+      // Delete user data document
+      await deleteDoc(doc(db, 'userData', user.uid));
+      
+      // Update local state
+      setUsers(users.filter(u => u.uid !== user.uid));
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw error;
+    }
   };
 
   const handleLogout = () => {
@@ -350,6 +456,13 @@ export const AdminDashboard: React.FC = () => {
                           <UserX className="w-5 h-5" />
                         </button>
                       )}
+                      <button
+                        onClick={() => setUserToDelete(user)}
+                        className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                        title="Excluir usuário"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -370,6 +483,14 @@ export const AdminDashboard: React.FC = () => {
           user={selectedUser}
           onClose={() => setSelectedUser(null)}
           onSave={handleUpdateAccess}
+        />
+      )}
+
+      {userToDelete && (
+        <DeleteUserModal
+          user={userToDelete}
+          onClose={() => setUserToDelete(null)}
+          onConfirm={() => handleDeleteUser(userToDelete)}
         />
       )}
     </div>

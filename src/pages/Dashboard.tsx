@@ -13,20 +13,23 @@ import { AccessCountdown } from '../components/AccessCountdown';
 import { RenewalModal } from '../components/RenewalModal';
 import { PaymentSuccessModal } from '../components/PaymentSuccessModal';
 import { defaultCategories } from '../data';
-import { Transaction, Category } from '../types';
-import { LogOut, Wallet, TrendingUp, TrendingDown, Settings, Menu, UserCircle, Pencil, DollarSign } from 'lucide-react';
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, parseISO, differenceInDays } from 'date-fns';
+import { Transaction, Category, Company } from '../types';
+import { LogOut, Wallet, TrendingUp, TrendingDown, Settings, Menu, UserCircle, Pencil, DollarSign, Building2, Landmark } from 'lucide-react';
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, parseISO, differenceInDays, subMonths } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 type DateFilter = 'day' | 'month' | 'year';
 
 const TIMEZONE = 'America/Sao_Paulo';
 
-const Dashboard: React.FC = () => {
-  const { user, signOut, getUserData, updateUserData, updateUsername, updateUserProfile } = useAuth();
+export const Dashboard: React.FC = () => {
+  const { user, signOut, getUserData, updateUserData, updateUsername, updateUserProfile, updatePassword } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -50,6 +53,31 @@ const Dashboard: React.FC = () => {
       setCategories(userData.categories.length > 0 ? userData.categories : defaultCategories);
     }
   }, []);
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchCompanies();
+    }
+  }, [user]);
+
+  const fetchCompanies = async () => {
+    if (!user?.uid) return;
+
+    try {
+      const companiesRef = collection(db, 'companies');
+      const q = query(companiesRef, where('userId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
+      
+      const companiesData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Company[];
+
+      setCompanies(companiesData);
+    } catch (err) {
+      console.error('Error fetching companies:', err);
+    }
+  };
 
   useEffect(() => {
     if (user && !user.isAdmin && !user.profile) {
@@ -87,6 +115,80 @@ const Dashboard: React.FC = () => {
           end: zonedTimeToUtc(endOfYear(zonedDate), TIMEZONE)
         };
     }
+  };
+
+  const getFilteredTransactions = (date: Date = selectedDate) => {
+    const range = getDateRange(date, dateFilter);
+    return transactions.filter(transaction => {
+      const transactionDate = utcToZonedTime(parseISO(transaction.date), TIMEZONE);
+      const startDate = utcToZonedTime(range.start, TIMEZONE);
+      const endDate = utcToZonedTime(range.end, TIMEZONE);
+      
+      return isWithinInterval(transactionDate, { 
+        start: startDate,
+        end: endDate
+      });
+    });
+  };
+
+  const calculateTrend = (currentAmount: number, type: 'income' | 'expense' | 'investment') => {
+    const previousMonth = subMonths(selectedDate, 1);
+    const previousTransactions = getFilteredTransactions(previousMonth);
+    
+    const previousAmount = previousTransactions.reduce((acc, transaction) => 
+      transaction.type === type ? acc + transaction.amount : acc, 0);
+
+    if (previousAmount === 0) return currentAmount > 0 ? 100 : 0;
+    
+    return Math.round(((currentAmount - previousAmount) / previousAmount) * 100);
+  };
+
+  const calculateBalance = () => {
+    const filteredTransactions = getFilteredTransactions();
+    return filteredTransactions.reduce((acc, transaction)  => {
+      return transaction.type === 'income'
+        ? acc + transaction.amount
+        : acc - transaction.amount;
+    }, 0);
+  };
+
+  const calculateTotalIncome = () => {
+    const filteredTransactions = getFilteredTransactions();
+    const total = filteredTransactions.reduce((acc, transaction) => {
+      return transaction.type === 'income'
+        ? acc + transaction.amount
+        : acc;
+    }, 0);
+    return {
+      amount: total,
+      trend: calculateTrend(total, 'income')
+    };
+  };
+
+  const calculateTotalExpenses = () => {
+    const filteredTransactions = getFilteredTransactions();
+    const total = filteredTransactions.reduce((acc, transaction) => {
+      return transaction.type === 'expense'
+        ? acc + transaction.amount
+        : acc;
+    }, 0);
+    return {
+      amount: total,
+      trend: calculateTrend(total, 'expense')
+    };
+  };
+
+  const calculateTotalInvestments = () => {
+    const filteredTransactions = getFilteredTransactions();
+    const total = filteredTransactions.reduce((acc, transaction) => {
+      return transaction.type === 'investment'
+        ? acc + transaction.amount
+        : acc;
+    }, 0);
+    return {
+      amount: total,
+      trend: calculateTrend(total, 'investment')
+    };
   };
 
   const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>) => {
@@ -144,45 +246,13 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const getFilteredTransactions = () => {
-    const range = getDateRange(selectedDate, dateFilter);
-    return transactions.filter(transaction => {
-      const transactionDate = utcToZonedTime(parseISO(transaction.date), TIMEZONE);
-      const startDate = utcToZonedTime(range.start, TIMEZONE);
-      const endDate = utcToZonedTime(range.end, TIMEZONE);
-      
-      return isWithinInterval(transactionDate, { 
-        start: startDate,
-        end: endDate
-      });
-    });
-  };
-
-  const calculateBalance = () => {
-    const filteredTransactions = getFilteredTransactions();
-    return filteredTransactions.reduce((acc, transaction) => {
-      return transaction.type === 'income'
-        ? acc + transaction.amount
-        : acc - transaction.amount;
-    }, 0);
-  };
-
-  const calculateTotalIncome = () => {
-    const filteredTransactions = getFilteredTransactions();
-    return filteredTransactions.reduce((acc, transaction) => {
-      return transaction.type === 'income'
-        ? acc + transaction.amount
-        : acc;
-    }, 0);
-  };
-
-  const calculateTotalExpenses = () => {
-    const filteredTransactions = getFilteredTransactions();
-    return filteredTransactions.reduce((acc, transaction) => {
-      return transaction.type === 'expense'
-        ? acc + transaction.amount
-        : acc;
-    }, 0);
+  const handleUpdatePassword = async (currentPassword: string, newPassword: string) => {
+    try {
+      await updatePassword(currentPassword, newPassword);
+    } catch (error) {
+      console.error('Error updating password:', error);
+      throw error;
+    }
   };
 
   const handleProfileSubmit = async (data: { cpf: string; phone: string }) => {
@@ -195,6 +265,10 @@ const Dashboard: React.FC = () => {
   };
 
   const dateRange = getDateRange(selectedDate, dateFilter);
+
+  const income = calculateTotalIncome();
+  const expenses = calculateTotalExpenses();
+  const investments = calculateTotalInvestments();
 
   return (
     <div className="min-h-screen bg-dark-primary">
@@ -227,6 +301,13 @@ const Dashboard: React.FC = () => {
                   onRenew={() => setShowRenewalModal(true)}
                 />
               )}
+              <button
+                onClick={() => navigate('/companies')}
+                className="px-4 py-2 text-gray-300 hover:text-gold-primary transition-colors flex items-center gap-2"
+              >
+                <Building2 size={20} />
+                <span>Empresas</span>
+              </button>
               <button
                 onClick={() => navigate('/goals')}
                 className="px-4 py-2 text-gray-300 hover:text-gold-primary transition-colors flex items-center gap-2"
@@ -284,27 +365,38 @@ const Dashboard: React.FC = () => {
                 </button>
               </div>
             </div>
-            <button
-              onClick={() => setShowMobileMenu(!showMobileMenu)}
-              className="p-2 text-gray-400 hover:text-gold-primary"
-            >
-              <Menu size={24} />
-            </button>
-          </div>
-          {!user?.isAdmin && user?.accessDuration && user?.createdAt && (
-            <div className="py-2 border-t border-dark-tertiary">
-              <AccessCountdown
-                accessDuration={user.accessDuration}
-                createdAt={user.createdAt}
-                onRenew={() => setShowRenewalModal(true)}
-              />
+            <div className="flex items-center gap-2">
+              {!user?.isAdmin && user?.accessDuration && user?.createdAt && (
+                <AccessCountdown
+                  accessDuration={user.accessDuration}
+                  createdAt={user.createdAt}
+                  onRenew={() => setShowRenewalModal(true)}
+                  compact
+                />
+              )}
+              <button
+                onClick={() => setShowMobileMenu(!showMobileMenu)}
+                className="p-2 text-gray-400 hover:text-gold-primary"
+              >
+                <Menu size={24} />
+              </button>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Mobile Menu */}
         {showMobileMenu && (
           <div className="absolute top-full left-0 right-0 bg-dark-secondary border-t border-dark-tertiary py-2 px-4 shadow-gold-sm">
+            <button
+              onClick={() => {
+                navigate('/companies');
+                setShowMobileMenu(false);
+              }}
+              className="w-full text-left py-3 px-4 rounded-lg hover:bg-dark-tertiary transition-colors flex items-center gap-2 text-gray-300"
+            >
+              <Building2 size={20} />
+              <span>Empresas</span>
+            </button>
             <button
               onClick={() => {
                 navigate('/goals');
@@ -356,11 +448,12 @@ const Dashboard: React.FC = () => {
           onAddTransaction={handleAddTransaction}
           onUpdateTransaction={handleUpdateTransaction}
           categories={categories}
+          companies={companies}
           editingTransaction={editingTransaction}
           onClose={() => setEditingTransaction(undefined)}
         />
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <DashboardCard
             title="Saldo Total"
             value={calculateBalance()}
@@ -369,17 +462,24 @@ const Dashboard: React.FC = () => {
           />
           <DashboardCard
             title="Receitas"
-            value={calculateTotalIncome()}
+            value={income.amount}
             icon={TrendingUp}
             type="income"
-            trend={12}
+            trend={income.trend}
           />
           <DashboardCard
             title="Despesas"
-            value={calculateTotalExpenses()}
+            value={expenses.amount}
             icon={TrendingDown}
             type="expense"
-            trend={-5}
+            trend={expenses.trend}
+          />
+          <DashboardCard
+            title="Investimentos"
+            value={investments.amount}
+            icon={Landmark}
+            type="investment"
+            trend={investments.trend}
           />
         </div>
 
@@ -418,6 +518,7 @@ const Dashboard: React.FC = () => {
           <ProfileEditor
             currentUsername={user?.username || ''}
             onUpdateUsername={handleUpdateUsername}
+            onUpdatePassword={handleUpdatePassword}
             onClose={() => setShowProfileEditor(false)}
           />
         )}
@@ -445,5 +546,3 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
-
-export { Dashboard };

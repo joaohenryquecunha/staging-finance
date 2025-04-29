@@ -26,12 +26,14 @@ export const FinancialHealthChart: React.FC<FinancialHealthChartProps> = ({ tran
 
     const income = filteredTransactions.reduce((acc, t) => 
       t.type === 'income' ? acc + t.amount : acc, 0);
-    const expenses = filteredTransactions.reduce((acc, t) => 
-      t.type === 'expense' ? acc + t.amount : acc, 0);
+    
+    // Consider both expenses and investments as outflows
+    const outflows = filteredTransactions.reduce((acc, t) => 
+      (t.type === 'expense' || t.type === 'investment') ? acc + t.amount : acc, 0);
 
     if (income === 0) return 0;
 
-    const ratio = (income - expenses) / income;
+    const ratio = (income - outflows) / income;
     const score = ratio * 100;
 
     return Math.min(Math.max(score, -100), 100);
@@ -73,18 +75,20 @@ export const FinancialHealthChart: React.FC<FinancialHealthChartProps> = ({ tran
 
     const income = filteredTransactions.reduce((acc, t) => 
       t.type === 'income' ? acc + t.amount : acc, 0);
-    const expenses = filteredTransactions.reduce((acc, t) => 
-      t.type === 'expense' ? acc + t.amount : acc, 0);
+    
+    // Consider both expenses and investments as outflows
+    const outflows = filteredTransactions.reduce((acc, t) => 
+      (t.type === 'expense' || t.type === 'investment') ? acc + t.amount : acc, 0);
 
     if (income === 0) {
       return 'Nenhuma receita registrada neste mês';
     }
 
     if (healthScore >= 0) {
-      const savingsPercent = ((income - expenses) / income * 100).toFixed(1);
+      const savingsPercent = ((income - outflows) / income * 100).toFixed(1);
       return `Você está economizando ${savingsPercent}% da sua renda`;
     } else {
-      const overspendingPercent = ((expenses - income) / income * 100).toFixed(1);
+      const overspendingPercent = ((outflows - income) / income * 100).toFixed(1);
       return `Você está gastando ${overspendingPercent}% a mais que sua renda`;
     }
   };

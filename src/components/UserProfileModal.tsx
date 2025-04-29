@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface UserProfileModalProps {
   onSubmit: (data: { cpf: string; phone: string }) => Promise<void>;
@@ -10,6 +11,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onSubmit }) 
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
   const formatCPF = (value: string) => {
     return value
@@ -32,10 +34,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onSubmit }) 
     const cleanCPF = cpf.replace(/\D/g, '');
     if (cleanCPF.length !== 11) return false;
     
-    // Check if all digits are the same
     if (/^(\d)\1+$/.test(cleanCPF)) return false;
     
-    // Validate CPF algorithm
     let sum = 0;
     let remainder;
     
@@ -86,12 +86,21 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ onSubmit }) 
     }
   };
 
+  const handleClose = () => {
+    navigate('/login');
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-dark-secondary w-full max-w-md rounded-xl">
         <div className="p-4 border-b border-dark-tertiary flex justify-between items-center">
           <h2 className="text-lg font-semibold text-gold-primary">Complete seu Cadastro</h2>
-          <X size={20} className="text-gray-400" />
+          <button
+            onClick={handleClose}
+            className="p-2 text-gray-400 hover:text-gold-primary rounded-lg"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">

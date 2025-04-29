@@ -1,5 +1,7 @@
 import React from 'react';
 import { CheckCircle, X } from 'lucide-react';
+import { differenceInDays } from 'date-fns';
+import { useAuth } from '../contexts/AuthContext';
 
 interface PaymentSuccessModalProps {
   onClose: () => void;
@@ -10,11 +12,17 @@ export const PaymentSuccessModal: React.FC<PaymentSuccessModalProps> = ({
   onClose,
   accessDuration
 }) => {
-  const getDurationText = (seconds: number) => {
-    const days = Math.floor(seconds / (24 * 60 * 60));
-    if (days === 30) return '1 mês';
-    if (days === 180) return '6 meses';
-    if (days === 365) return '1 ano';
+  const { user } = useAuth();
+
+  const getDurationText = () => {
+    if (!user?.createdAt) return '0 dias';
+    
+    const startTime = new Date(user.createdAt).getTime();
+    const now = new Date().getTime();
+    const elapsedSeconds = Math.floor((now - startTime) / 1000);
+    const remainingSeconds = accessDuration - elapsedSeconds;
+    const days = Math.max(0, Math.floor(remainingSeconds / 86400));
+    
     return `${days} dias`;
   };
 
@@ -46,7 +54,7 @@ export const PaymentSuccessModal: React.FC<PaymentSuccessModalProps> = ({
             </p>
             
             <p className="text-lg font-medium text-emerald-400">
-              {getDurationText(accessDuration)}
+              {getDurationText()}
             </p>
           </div>
 

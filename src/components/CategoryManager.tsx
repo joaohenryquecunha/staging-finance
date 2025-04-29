@@ -27,6 +27,8 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (newCategory.name.trim()) {
+      // Save category color to localStorage
+      localStorage.setItem(`category_color_${newCategory.name}`, newCategory.color);
       onAddCategory(newCategory);
       setNewCategory({ name: '', color: '#FFD700' });
     }
@@ -90,7 +92,10 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                   <span className="font-medium text-gray-200 text-base">{category.name}</span>
                 </div>
                 <button
-                  onClick={() => onDeleteCategory(category.id)}
+                  onClick={() => {
+                    localStorage.removeItem(`category_color_${category.name}`);
+                    onDeleteCategory(category.id);
+                  }}
                   className="text-red-400 hover:text-red-300 p-2 rounded-lg"
                 >
                   <Trash2 size={20} />
