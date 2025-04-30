@@ -82,6 +82,9 @@ Deno.serve(async (req) => {
       throw new Error(`Invalid product ID: ${payload.product.id}`);
     }
 
+    // Convert days to seconds for access_duration
+    const accessDurationSeconds = subscriptionDays * 24 * 60 * 60;
+
     // Find user by document (CPF)
     const { data: profiles, error: profileError } = await supabaseClient
       .from('profiles')
@@ -112,6 +115,7 @@ Deno.serve(async (req) => {
       .from('profiles')
       .update({
         is_approved: true,
+        access_duration: accessDurationSeconds,
         trial_expires_at: newExpirationDate.toISOString(),
         updated_at: new Date().toISOString(),
       })

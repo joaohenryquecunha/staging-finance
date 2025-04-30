@@ -264,6 +264,14 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  const getRemainingDays = () => {
+    if (!user?.accessDuration) return 0;
+    
+    // Convert accessDuration from seconds to days
+    const totalDays = Math.floor(user.accessDuration / (24 * 60 * 60));
+    return totalDays;
+  };
+
   const dateRange = getDateRange(selectedDate, dateFilter);
 
   const income = calculateTotalIncome();
@@ -530,7 +538,7 @@ export const Dashboard: React.FC = () => {
         {showRenewalModal && (
           <RenewalModal
             onClose={() => setShowRenewalModal(false)}
-            daysRemaining={user?.trialExpiresAt ? differenceInDays(parseISO(user.trialExpiresAt), new Date()) : 0}
+            daysRemaining={getRemainingDays()}
           />
         )}
 

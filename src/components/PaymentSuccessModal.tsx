@@ -17,12 +17,8 @@ export const PaymentSuccessModal: React.FC<PaymentSuccessModalProps> = ({
   const getDurationText = () => {
     if (!user?.createdAt) return '0 dias';
     
-    const startTime = new Date(user.createdAt).getTime();
-    const now = new Date().getTime();
-    const elapsedSeconds = Math.floor((now - startTime) / 1000);
-    const remainingSeconds = accessDuration - elapsedSeconds;
-    const days = Math.max(0, Math.floor(remainingSeconds / 86400));
-    
+    // Convert accessDuration from seconds to days
+    const days = Math.floor(accessDuration / (24 * 60 * 60));
     return `${days} dias`;
   };
 

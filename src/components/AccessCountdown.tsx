@@ -19,11 +19,9 @@ export const AccessCountdown: React.FC<AccessCountdownProps> = ({
 
   useEffect(() => {
     const calculateDaysRemaining = () => {
-      const startTime = new Date(createdAt).getTime();
-      const now = new Date().getTime();
-      const elapsedSeconds = Math.floor((now - startTime) / 1000);
-      const remainingSeconds = accessDuration - elapsedSeconds;
-      return Math.max(0, Math.floor(remainingSeconds / 86400));
+      // Convert accessDuration from seconds to days
+      const totalDays = Math.floor(accessDuration / (24 * 60 * 60));
+      return totalDays;
     };
 
     setDaysRemaining(calculateDaysRemaining());
