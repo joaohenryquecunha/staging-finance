@@ -3,7 +3,7 @@ import { getAllUsers, approveUser, disapproveUser, updateUserAccess } from '../c
 import { CheckCircle, XCircle, UserCheck, UserX, Search, LogOut, Users, Clock, Calendar, AlertTriangle, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow, parseISO, differenceInDays, addDays, format } from 'date-fns';
+import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, parseISO, differenceInDays, addDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -114,7 +114,8 @@ const AccessModal: React.FC<AccessModalProps> = ({ user, onClose, onSave }) => {
       }
 
       // Calculate new expiration date
-      const expirationDate = addDays(new Date(), Math.floor(newDuration / (24 * 60 * 60))).toISOString();
+      const startDate = user.createdAt ? new Date(user.createdAt) : new Date();
+      const expirationDate = addDays(startDate, Math.floor(newDuration / (24 * 60 * 60))).toISOString();
 
       await onSave(user.uid, newDuration, expirationDate);
       onClose();
@@ -290,24 +291,12 @@ export const AdminDashboard: React.FC = () => {
 
   const getAccessStatus = (user: UserData) => {
     if (user.isAdmin) return { text: 'Acesso permanente', color: 'text-emerald-400' };
-    if (!user.accessExpirationDate) return { text: 'Sem período definido', color: 'text-gray-400' };
-
-    const expirationDate = new Date(user.accessExpirationDate);
-    const now = new Date();
     
-    if (expirationDate <= now) {
-      return { text: 'Período expirado', color: 'text-red-400' };
-    }
-
-    const daysRemaining = differenceInDays(expirationDate, now);
+    const currentDays = user.accessDuration ? Math.floor(user.accessDuration / (24 * 60 * 60)) : 0;
     
-    if (daysRemaining <= 3) {
-      return { text: `${daysRemaining} dias restantes`, color: 'text-red-400' };
-    } else if (daysRemaining <= 7) {
-      return { text: `${daysRemaining} dias restantes`, color: 'text-amber-400' };
-    } else {
-      return { text: `${daysRemaining} dias restantes`, color: 'text-emerald-400' };
-    }
+    if (currentDays === 0) return { text: 'Expirado', color: 'text-red-400' };
+    
+    return { text: `${currentDays} dias de acesso`, color: 'text-emerald-400' };
   };
 
   const getAccountAge = (createdAt?: string) => {

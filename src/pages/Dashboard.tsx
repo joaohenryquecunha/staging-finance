@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardCard } from '../components/DashboardCard';
 import { TransactionList } from '../components/TransactionList';
@@ -15,7 +15,7 @@ import { PaymentSuccessModal } from '../components/PaymentSuccessModal';
 import { defaultCategories } from '../data';
 import { Transaction, Category, Company } from '../types';
 import { LogOut, Wallet, TrendingUp, TrendingDown, Settings, Menu, UserCircle, Pencil, DollarSign, Building2, Landmark } from 'lucide-react';
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, parseISO, differenceInDays, subMonths } from 'date-fns';
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, parseISO, subMonths } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -26,7 +26,7 @@ type DateFilter = 'day' | 'month' | 'year';
 const TIMEZONE = 'America/Sao_Paulo';
 
 export const Dashboard: React.FC = () => {
-  const { user, signOut, getUserData, updateUserData, updateUsername, updateUserProfile, updatePassword } = useAuth();
+  const { user, signOut, getUserData, updateUserData, updateUsername, updateUserProfile, updatePassword, checkAccessExpiration } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -47,20 +47,23 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (!user || user.isAdmin) return;
+    
+    const isExpired = checkAccessExpiration();
+    if (isExpired) {
+      setShowRenewalModal(true);
+    }
+  }, [user, checkAccessExpiration]);
+
+  useEffect(() => {
     const userData = getUserData();
     if (userData) {
       setTransactions(userData.transactions || []);
       setCategories(userData.categories.length > 0 ? userData.categories : defaultCategories);
     }
-  }, []);
+  }, [getUserData]);
 
-  useEffect(() => {
-    if (user?.uid) {
-      fetchCompanies();
-    }
-  }, [user]);
-
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     if (!user?.uid) return;
 
     try {
@@ -68,16 +71,28 @@ export const Dashboard: React.FC = () => {
       const q = query(companiesRef, where('userId', '==', user.uid));
       const querySnapshot = await getDocs(q);
       
-      const companiesData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Company[];
+      const companiesData = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          name: data.name || '',
+          cnpj: data.cnpj || '',
+          userId: data.userId || '',
+          createdAt: data.createdAt || new Date().toISOString()
+        };
+      });
 
       setCompanies(companiesData);
-    } catch (err) {
-      console.error('Error fetching companies:', err);
+    } catch (error) {
+      console.error('Erro ao buscar empresas:', error);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchCompanies();
+    }
+  }, [user, fetchCompanies]);
 
   useEffect(() => {
     if (user && !user.isAdmin && !user.profile) {
@@ -93,7 +108,7 @@ export const Dashboard: React.FC = () => {
       setShowPaymentSuccess(true);
       navigate('/dashboard', { replace: true });
     }
-  }, [searchParams]);
+  }, [searchParams, navigate]);
 
   const getDateRange = (date: Date, filter: DateFilter) => {
     const zonedDate = utcToZonedTime(date, TIMEZONE);
@@ -260,7 +275,7 @@ export const Dashboard: React.FC = () => {
       await updateUserProfile(data);
       setShowProfileModal(false);
     } catch (error) {
-      throw error;
+      console.error(error);
     }
   };
 
@@ -333,6 +348,7 @@ export const Dashboard: React.FC = () => {
               <ReportGenerator
                 transactions={transactions}
                 categories={categories}
+                companies={companies}
                 className="px-4 py-2 text-gray-300 hover:text-gold-primary transition-colors flex items-center gap-2"
               />
               <button
@@ -438,6 +454,7 @@ export const Dashboard: React.FC = () => {
             <ReportGenerator
               transactions={transactions}
               categories={categories}
+              companies={companies}
               className="w-full text-left py-3 px-4 rounded-lg hover:bg-dark-tertiary transition-colors flex items-center gap-2 text-gray-300"
             />
             <button

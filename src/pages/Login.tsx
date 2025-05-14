@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Wallet, Settings, Loader2, UserPlus, LogIn } from 'lucide-react';
 import { UserProfileModal } from '../components/UserProfileModal';
+import { RenewalModal } from '../components/RenewalModal';
 
 export const Login: React.FC = () => {
   const [isRegistering, setIsRegistering] = useState(false);
@@ -17,8 +18,17 @@ export const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showWhatsApp, setShowWhatsApp] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
   const { signIn, signUp, updateUserProfile } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const expired = searchParams.get('expired');
+    if (expired === 'true') {
+      setShowRenewalModal(true);
+    }
+  }, [searchParams]);
 
   // Effect to handle WhatsApp button animation
   useEffect(() => {
@@ -372,6 +382,13 @@ export const Login: React.FC = () => {
 
       {showProfileModal && (
         <UserProfileModal onSubmit={handleProfileSubmit} />
+      )}
+
+      {showRenewalModal && (
+        <RenewalModal
+          onClose={() => setShowRenewalModal(false)}
+          daysRemaining={0}
+        />
       )}
     </div>
   );

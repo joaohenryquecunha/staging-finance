@@ -38,9 +38,9 @@ const plans: Plan[] = [
     id: '180days',
     name: '6 meses de acesso',
     days: 180,
-    monthlyPrice: 21.00,
+    monthlyPrice: 25.70,
     fullPrice: 249.90,
-    link: '#', // Replace with actual payment link
+    link: 'https://payfast.greenn.com.br/114905', // Replace with actual payment link
     features: [
       'Acesso a todas as funcionalidades',
       'Suporte prioritário',
@@ -53,15 +53,15 @@ const plans: Plan[] = [
     id: '365days',
     name: '1 ano de acesso',
     days: 365,
-    monthlyPrice: 42.00,
+    monthlyPrice: 51.41,
     fullPrice: 499.90,
-    link: '#', // Replace with actual payment link
+    link: 'https://payfast.greenn.com.br/114906', // Replace with actual payment link
     recommended: true,
     features: [
       'Acesso a todas as funcionalidades',
       'Suporte VIP',
       'Relatórios em PDF',
-      'Economia de 25%',
+      'Economia de 17%',
       'Acesso antecipado a novidades'
     ],
     icon: <Crown className="w-6 h-6 text-gold-primary" />

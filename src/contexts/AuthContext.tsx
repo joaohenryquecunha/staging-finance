@@ -47,6 +47,7 @@ interface AuthContextType {
   updateUsername: (newUsername: string) => Promise<void>;
   updateUserProfile: (profile: UserProfile) => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  checkAccessExpiration: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -115,6 +116,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, [user?.uid]);
 
+  // Effect to check access expiration periodically
+  useEffect(() => {
+    if (!user || user.isAdmin) return;
+
+    const checkAccess = () => {
+      if (checkAccessExpiration()) {
+        signOut();
+      }
+    };
+
+    const interval = setInterval(checkAccess, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const checkAccessExpiration = () => {
+    if (!user || user.isAdmin) return false;
+    if (user.isApproved) return false;
+    
+    // If no accessDuration is defined, access has expired
+    if (!user.accessDuration || !user.createdAt) return true;
+
+    const startTime = new Date(user.createdAt).getTime();
+    const now = new Date().getTime();
+    const elapsedSeconds = Math.floor((now - startTime) / 1000);
+
+    return elapsedSeconds >= user.accessDuration;
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser && !user?.isAdmin) {
@@ -128,17 +157,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const userData = userDoc.data();
             
             // Check if access has expired
-            if (!userData.isAdmin && userData.accessDuration) {
+            if (!userData.isAdmin && (!userData.accessDuration || !userData.createdAt)) {
+              await firebaseSignOut(auth);
+              setUser(null);
+              setUserData(null);
+              navigate('/login?expired=true');
+              return;
+            }
+
+            // Check if elapsed time exceeds duration
+            if (!userData.isAdmin && userData.accessDuration && userData.createdAt) {
               const startTime = new Date(userData.createdAt).getTime();
               const now = new Date().getTime();
               const elapsedSeconds = Math.floor((now - startTime) / 1000);
               
-              // Only consider expired if elapsed time exceeds duration AND user is not approved
               if (elapsedSeconds >= userData.accessDuration && !userData.isApproved) {
                 await firebaseSignOut(auth);
                 setUser(null);
                 setUserData(null);
-                throw new Error('Seu período de acesso expirou. Entre em contato com o administrador.');
+                navigate('/login?expired=true');
+                return;
               }
             }
 
@@ -212,16 +250,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const userDocData = userDoc.data();
 
+      // Check if access duration is defined
+      if (!userDocData.isAdmin && (!userDocData.accessDuration || !userDocData.createdAt)) {
+        await firebaseSignOut(auth);
+        navigate('/login?expired=true');
+        throw new Error('Seu período de acesso expirou');
+      }
+
       // Check if access has expired
-      if (!userDocData.isAdmin && userDocData.accessDuration) {
+      if (!userDocData.isAdmin && userDocData.accessDuration && userDocData.createdAt) {
         const startTime = new Date(userDocData.createdAt).getTime();
         const now = new Date().getTime();
         const elapsedSeconds = Math.floor((now - startTime) / 1000);
         
-        // Only consider expired if elapsed time exceeds duration AND user is not approved
         if (elapsedSeconds >= userDocData.accessDuration && !userDocData.isApproved) {
           await firebaseSignOut(auth);
-          throw new Error('Seu período de acesso expirou. Entre em contato com o administrador.');
+          navigate('/login?expired=true');
+          throw new Error('Seu período de acesso expirou');
         }
       }
 
@@ -413,7 +458,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updateUserData,
       updateUsername,
       updateUserProfile,
-      updatePassword: updateUserPassword
+      updatePassword: updateUserPassword,
+      checkAccessExpiration
     }}>
       {children}
     </AuthContext.Provider>
@@ -465,11 +511,11 @@ export const disapproveUser = async (uid: string) => {
   }
 };
 
-export const updateUserAccess = async (uid: string, accessDuration: number, expirationDate: string) => {
+export const updateUserAccess = async (uid: string, accessDuration: number) => {
   try {
     await updateDoc(doc(db, 'users', uid), {
       accessDuration,
-      accessExpirationDate: expirationDate
+      createdAt: new Date().toISOString() // Reset the start time when updating access duration
     });
   } catch (error) {
     console.error('Error updating user access:', error);

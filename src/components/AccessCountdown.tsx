@@ -25,13 +25,6 @@ export const AccessCountdown: React.FC<AccessCountdownProps> = ({
     };
 
     setDaysRemaining(calculateDaysRemaining());
-
-    // Update countdown every minute
-    const interval = setInterval(() => {
-      setDaysRemaining(calculateDaysRemaining());
-    }, 60000);
-
-    return () => clearInterval(interval);
   }, [accessDuration, createdAt]);
 
   const getStatusColor = () => {
@@ -57,7 +50,7 @@ export const AccessCountdown: React.FC<AccessCountdownProps> = ({
               <div className="flex items-center gap-2">
                 <Clock size={16} className={getStatusColor()} />
                 <span className={`font-medium ${getStatusColor()}`}>
-                  {daysRemaining} {daysRemaining === 1 ? 'dia' : 'dias'} restantes
+                  {daysRemaining} {daysRemaining === 1 ? 'dia' : 'dias'} de acesso
                 </span>
               </div>
               <button
@@ -82,7 +75,7 @@ export const AccessCountdown: React.FC<AccessCountdownProps> = ({
       <div className="flex items-center gap-2">
         <Clock size={20} className={getStatusColor()} />
         <span className={`font-medium ${getStatusColor()}`}>
-          {daysRemaining} {daysRemaining === 1 ? 'dia' : 'dias'} restantes
+          {daysRemaining} {daysRemaining === 1 ? 'dia' : 'dias'} de acesso
         </span>
       </div>
       <button

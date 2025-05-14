@@ -3,31 +3,17 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-// Register service worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      const registration = await navigator.serviceWorker.register('/sw.js', {
-        scope: '/'
-      });
-      console.log('ServiceWorker registration successful:', registration);
-    } catch (error) {
-      console.error('ServiceWorker registration failed:', error);
-    }
-  });
-}
-
-// Adiciona evento para instalação do PWA
+// PWA install event
 window.addEventListener('beforeinstallprompt', (e) => {
-  // Previne o comportamento padrão
+  // Prevent default behavior
   e.preventDefault();
-  // Armazena o evento para usar depois
+  // Store the event for later use
   window.deferredPrompt = e;
-  // Log para debug
+  // Debug log
   console.log('PWA install prompt detected and saved');
 });
 
-// Log quando o PWA é instalado com sucesso
+// Log when PWA is successfully installed
 window.addEventListener('appinstalled', () => {
   console.log('PWA was installed successfully');
   window.deferredPrompt = null;
