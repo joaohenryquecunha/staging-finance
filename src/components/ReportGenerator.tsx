@@ -1,16 +1,10 @@
 import React from 'react';
 import {
   format,
-  startOfDay,
-  endOfDay,
   startOfMonth,
   endOfMonth,
   startOfYear,
   endOfYear,
-  isWithinInterval,
-  parseISO,
-  differenceInDays,
-  differenceInMonths
 } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
@@ -18,7 +12,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Transaction, Category, Company } from '../types';
 import { formatCurrency } from '../utils/format';
-import { FileDown, X } from 'lucide-react';
+import { FileDown } from 'lucide-react';
 
 declare module 'jspdf' {
   interface jsPDF {
@@ -30,13 +24,15 @@ declare module 'jspdf' {
   }
 }
 
-type DateFilter = 'day' | 'month' | 'year' | 'all';
-
 interface ReportGeneratorProps {
   transactions: Transaction[];
   categories: Category[];
   companies?: Company[];
   className?: string;
+  filter: 'month' | 'year';
+  period: string; // yyyy-MM para mês, yyyy para ano
+  onClose?: () => void;
+  disabled?: boolean;
 }
 
 const TIMEZONE = 'America/Sao_Paulo';
@@ -56,38 +52,40 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
   transactions, 
   categories,
   companies = [],
-  className = ''
+  className = '',
+  filter,
+  period,
+  onClose,
+  disabled
 }) => {
-  const getDateRange = (date: Date, filter: DateFilter) => {
-    const zonedDate = utcToZonedTime(date, TIMEZONE);
-    
-    switch (filter) {
-      case 'day':
-        return {
-          start: zonedTimeToUtc(startOfDay(zonedDate), TIMEZONE),
-          end: zonedTimeToUtc(endOfDay(zonedDate), TIMEZONE)
-        };
-      case 'month':
-        return {
-          start: zonedTimeToUtc(startOfMonth(zonedDate), TIMEZONE),
-          end: zonedTimeToUtc(endOfMonth(zonedDate), TIMEZONE)
-        };
-      case 'year':
-        return {
-          start: zonedTimeToUtc(startOfYear(zonedDate), TIMEZONE),
-          end: zonedTimeToUtc(endOfYear(zonedDate), TIMEZONE)
-        };
-      case 'all':
-        return {
-          start: new Date(0),
-          end: new Date(8640000000000000)
-        };
+  const getDateRange = () => {
+    if (filter === 'month' && period) {
+      const [year, month] = period.split('-').map(Number);
+      const date = new Date(year, month - 1, 1);
+      return {
+        start: zonedTimeToUtc(startOfMonth(date), TIMEZONE),
+        end: zonedTimeToUtc(endOfMonth(date), TIMEZONE)
+      };
     }
+    if (filter === 'year' && period) {
+      const year = Number(period);
+      const date = new Date(year, 0, 1);
+      return {
+        start: zonedTimeToUtc(startOfYear(date), TIMEZONE),
+        end: zonedTimeToUtc(endOfYear(date), TIMEZONE)
+      };
+    }
+    // fallback: mês atual
+    const now = new Date();
+    return {
+      start: zonedTimeToUtc(startOfMonth(now), TIMEZONE),
+      end: zonedTimeToUtc(endOfMonth(now), TIMEZONE)
+    };
   };
 
   const generatePDF = async () => {
     try {
-      const range = getDateRange(new Date(), 'month');
+      const range = getDateRange();
       const filteredTransactions = transactions
         .filter(transaction => {
           const transactionDate = utcToZonedTime(new Date(transaction.date), TIMEZONE);
@@ -339,6 +337,7 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
       // Save the PDF
       const fileName = `relatorio-${format(range.start, 'yyyy-MM-dd')}.pdf`;
       doc.save(fileName);
+      if (onClose) onClose();
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
     }
@@ -348,9 +347,11 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
     <button
       onClick={generatePDF}
       className={className}
+      disabled={disabled}
+      style={disabled ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
     >
-      <FileDown size={20} />
-      <span>Relatórios</span>
+      <FileDown size={32} className="text-gold-primary" />
+      <span>Gerar PDF</span>
     </button>
   );
 };

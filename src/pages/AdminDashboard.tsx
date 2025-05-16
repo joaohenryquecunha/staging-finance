@@ -3,7 +3,8 @@ import { getAllUsers, approveUser, disapproveUser, updateUserAccess } from '../c
 import { CheckCircle, XCircle, UserCheck, UserX, Search, LogOut, Users, Clock, Calendar, AlertTriangle, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval, parseISO, differenceInDays, addDays, formatDistanceToNow } from 'date-fns';
+import { getDiasRestantes } from '../utils/access';
+import { parseISO, addDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -14,7 +15,6 @@ interface UserData {
   isAdmin: boolean;
   isApproved: boolean;
   accessDuration?: number;
-  accessExpirationDate?: string;
   createdAt?: string;
   profile?: {
     cpf: string;
@@ -250,8 +250,8 @@ export const AdminDashboard: React.FC = () => {
     setUsers(updatedUsers as UserData[]);
   };
 
-  const handleUpdateAccess = async (userId: string, accessDuration: number, expirationDate: string) => {
-    await updateUserAccess(userId, accessDuration, expirationDate);
+  const handleUpdateAccess = async (userId: string, accessDuration: number) => {
+    await updateUserAccess(userId, accessDuration);
     const updatedUsers = await getAllUsers();
     setUsers(updatedUsers as UserData[]);
   };
@@ -285,18 +285,15 @@ export const AdminDashboard: React.FC = () => {
   const activeUsers = users.filter(user => user.isApproved).length;
   const inactiveUsers = users.filter(user => !user.isApproved).length;
   const trialUsers = users.filter(user => {
-    if (!user.accessExpirationDate || user.isAdmin) return false;
-    return new Date(user.accessExpirationDate) > new Date();
+    if (user.isAdmin) return false;
+    return getDiasRestantes(user.accessDuration, user.createdAt) > 0;
   }).length;
 
   const getAccessStatus = (user: UserData) => {
     if (user.isAdmin) return { text: 'Acesso permanente', color: 'text-emerald-400' };
-    
-    const currentDays = user.accessDuration ? Math.floor(user.accessDuration / (24 * 60 * 60)) : 0;
-    
-    if (currentDays === 0) return { text: 'Expirado', color: 'text-red-400' };
-    
-    return { text: `${currentDays} dias de acesso`, color: 'text-emerald-400' };
+    const diasRestantes = getDiasRestantes(user.accessDuration, user.createdAt);
+    if (diasRestantes === 0) return { text: 'Expirado', color: 'text-red-400' };
+    return { text: `${diasRestantes} ${diasRestantes === 1 ? 'dia' : 'dias'} de acesso`, color: 'text-emerald-400' };
   };
 
   const getAccountAge = (createdAt?: string) => {
